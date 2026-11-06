@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>BRMove</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<style>
+:root{--r:#D62828;--tx:#1b1b1b;--mut:#6b6b6b;--ln:#e6e6e6}
+body{margin:0;font:16px system-ui,sans-serif;color:var(--tx);background:#f6f6f6;padding-bottom:calc(70px + env(safe-area-inset-bottom))}
+header{background:var(--r);color:#fff;padding:calc(14px + env(safe-area-inset-top)) 16px 14px;font-weight:800;font-size:22px}
+main{padding:14px;max-width:560px;margin:auto}
+h2{margin:0 0 8px}
+.card{background:#fff;border-radius:14px;padding:14px;margin-bottom:12px;box-shadow:0 1px 3px #0001}
+input,textarea{width:100%;box-sizing:border-box;padding:12px;margin:6px 0;border:1px solid var(--ln);border-radius:10px;font:inherit}
+button{background:var(--r);color:#fff;border:0;border-radius:10px;padding:12px 16px;font:inherit;font-weight:700;width:100%;margin-top:6px}
+button.s{background:#fff;color:var(--r);border:1px solid var(--r)}
+button.sm{width:auto;padding:8px 12px;font-size:14px}
+.opt{display:flex;justify-content:space-between;padding:12px;border:2px solid var(--ln);border-radius:12px;margin:8px 0}
+.opt.on{border-color:var(--r);background:#fff1f1}
+nav{position:fixed;bottom:0;left:0;right:0;display:none;background:#fff;border-top:1px solid var(--ln);padding-bottom:env(safe-area-inset-bottom)}
+nav a{flex:1;text-align:center;padding:14px 0;color:var(--mut);font-weight:600}
+nav a.on{color:var(--r)}
+.st{font-size:13px;font-weight:700;color:var(--r)}
+#map{height:220px;border-radius:12px;margin:8px 0}
+#toast{position:fixed;left:16px;right:16px;bottom:84px;background:#222;color:#fff;padding:12px;border-radius:10px;display:none;text-align:center}
+</style></head>
+<body>
+<header>BRMove</header>
+<main id="app"></main>
+<nav><a data-t="new" onclick="go('new')">Pedir</a><a data-t="orders" onclick="go('orders')">Pedidos</a><a onclick="logout()">Sair</a></nav>
+<div id="toast"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script>
+const API='https://api.fretesbsb.com.br';
+const $=s=>document.querySelector(s);
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const V={moto:'🏍️ Moto',carro:'🚗 Carro',van:'🚐 Van',caminhao:'🚚 Caminhão'};
+const ST={pending:'Procurando motorista',accepted:'Motorista a caminho',picked_up:'Em entrega',delivered:'Entregue',cancelled:'Cancelada'};
+const money=n=>'R$ '+Number(n).toFixed(2).replace('.',',');
+let token=localStorage.getItem('t'),tab='new',q=null,sel=null,timer=null,map=null,mk=null,tid=null;
+
+function toast(m){const t=$('#toast');t.textContent=m;t.style.display='block';setTimeout(()=>t.style.display='none',3500)}
+async function api(path,opt={}){
+  const r=await fetch(API+path,{method:opt.method||'GET',headers:Object.assign({'Content-Type':'application/json'},token?{Authorization:'Bearer '+token}:{}),body:opt.body?JSON.stringify(opt.body):undefined});
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok)throw new Error(d.error||'Erro inesperado');
+  return d;
+}
+function run(fn){return fn().catch(e=>{if(e.message==='Não autenticado')return logout();toast(e.message==='Failed to fetch'?'Sem conexão com o servidor':e.message)})}
+
+function go(t){tab=t;clearInterval(timer);tid=null;if(map){map.remove();map=null}render()}
+function logout(){token=null;localStorage.removeItem('t');q=null;sel=null;go('new')}
+function render(){
+  $('nav').style.display=token?'flex':'none';
+  if(!token)return loginView(false);
+  document.querySelectorAll('nav a').forEach(a=>a.classList.toggle('on',a.dataset.t===tab));
+  tab==='new'?newView():ordersView();
+}
+
+function loginView(reg){
+  $('#app').innerHTML=`<div class="card"><h2>${reg?'Criar conta':'Entrar'}</h2>
+  ${reg?'<input id="nm" placeholder="Nome"><input id="ph" type="tel" placeholder="Telefone">':''}
+  <input id="em" type="email" placeholder="E-mail"><input id="pw" type="password" placeholder="Senha (mín. 6)">
+  <button onclick="auth(${reg})">${reg?'Cadastrar':'Entrar'}</button>
+  <button class="s" onclick="loginView(${!reg})">${reg?'Já tenho conta':'Criar conta'}</button></div>`;
+}
+function auth(reg){run(async()=>{
+  const b={email:$('#em').value,password:$('#pw').value};let d;
+  if(reg){b.name=$('#nm').value;b.phone=$('#ph').value;b.role='client';d=await api('/auth/register',{method:'POST',body:b})}
+  else d=await api('/auth/login',{method:'POST',body:b});
+  if(d.user.role!=='client')throw new Error('Este app é para clientes');
+  token=d.token;localStorage.setItem('t',token);tab='new';render();
+})}
+
+function newView(){
+  $('#app').innerHTML=`<div class="card"><h2>Nova entrega</h2>
+  <input id="pa" placeholder="Endereço de coleta (rua, número, cidade)" value="${esc(q&&q.p.address)}">
+  <input id="da" placeholder="Endereço de entrega" value="${esc(q&&q.d.address)}">
+  <textarea id="nt" rows="2" placeholder="Observações (opcional)"></textarea>
+  <button onclick="quote()">Ver preços</button></div><div id="opts"></div>`;
+  if(q)opts();
+}
+async function geo(a){
+  const r=await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=br&q='+encodeURIComponent(a));
+  const d=await r.json();
+  if(!d[0])throw new Error('Endereço não encontrado: '+a);
+  return{lat:+d[0].lat,lng:+d[0].lon};
+}
+function quote(){run(async()=>{
+  const a=$('#pa').value.trim(),b=$('#da').value.trim();
+  if(!a||!b)throw new Error('Preencha os dois endereços');
+  const p=await geo(a),d=await geo(b);
+  const r=await api('/quotes',{method:'POST',body:{pickup:p,dropoff:d}});
+  q={p:Object.assign({address:a},p),d:Object.assign({address:b},d),o:r.options,km:r.distance_km};sel=null;opts();
+})}
+function opts(){
+  $('#opts').innerHTML=`<div class="card"><b>${Number(q.km).toFixed(1)} km</b> · escolha o veículo
+  ${q.o.map(o=>`<div class="opt ${sel===o.vehicle_type?'on':''}" onclick="sel='${o.vehicle_type}';opts()"><span>${V[o.vehicle_type]}</span><b>${money(o.price)}</b></div>`).join('')}
+  <button ${sel?'':'disabled style="opacity:.5"'} onclick="order()">Pedir entrega</button></div>`;
+}
+function order(){run(async()=>{
+  await api('/orders',{method:'POST',body:{vehicle_type:sel,pickup:q.p,dropoff:q.d,notes:$('#nt')?$('#nt').value:''}});
+  q=null;sel=null;toast('Pedido criado!');go('orders');
+})}
+
+const card=o=>`<div class="card"><div class="st">#${o.id} · ${ST[o.status]}</div>
+  <div>📍 ${esc(o.pickup_address)}</div><div>🏁 ${esc(o.dropoff_address)}</div>
+  <div>${V[o.vehicle_type]} · ${Number(o.distance_km).toFixed(1)} km · <b>${money(o.price)}</b></div>
+  ${['accepted','picked_up'].includes(o.status)?`<button class="s sm" onclick="track(${o.id})">Ver motorista no mapa</button> `:''}
+  ${['pending','accepted'].includes(o.status)?`<button class="s sm" onclick="cancelOrder(${o.id})">Cancelar</button>`:''}
+  ${o.status==='delivered'?(o.rating?`<div>Sua nota: ${'★'.repeat(o.rating)}</div>`:[1,2,3,4,5].map(n=>`<button class="s sm" onclick="rate(${o.id},${n})">${n}★</button>`).join(' ')):''}</div>`;
+
+function ordersView(){
+  $('#app').innerHTML='<div id="tr"></div><div id="ol"></div>';
+  load();timer=setInterval(()=>{load();poll()},10000);
+}
+function load(){return run(async()=>{
+  const l=await api('/orders/mine');
+  $('#ol').innerHTML=l.length?l.map(card).join(''):'<div class="card">Você ainda não fez pedidos.</div>';
+})}
+function cancelOrder(id){if(confirm('Cancelar este pedido?'))run(async()=>{await api('/orders/'+id+'/cancel',{method:'POST'});load()})}
+function rate(id,n){run(async()=>{await api('/orders/'+id+'/rate',{method:'POST',body:{rating:n}});toast('Obrigado pela avaliação!');load()})}
+
+function track(id){
+  tid=id;
+  $('#tr').innerHTML='<div class="card"><b>Motorista</b> <span id="ti"></span><div id="map"></div><button class="s sm" onclick="closeTrack()">Fechar</button></div>';
+  if(map){map.remove()}
+  map=L.map('map').setView([-15.79,-47.88],13);mk=null;
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap'}).addTo(map);
+  poll();
+}
+function closeTrack(){tid=null;if(map){map.remove();map=null}$('#tr').innerHTML=''}
+function poll(){if(!tid)return;run(async()=>{
+  const t=await api('/orders/'+tid+'/tracking');
+  $('#ti').textContent=t.driver_name+' · '+t.plate;
+  if(t.lat!=null&&map){const p=[t.lat,t.lng];if(mk)mk.setLatLng(p);else mk=L.marker(p).addTo(map);map.setView(p)}
+})}
+
+render();
+</script>
+</body></html>
