@@ -15,7 +15,8 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
-      - run: npm install
+      - run: npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6
+      - run: test -f capacitor.config.json || npx cap init BRMove br.com.fretesbsb.brmove --web-dir www
       - run: npx cap add android
       - run: npx cap sync android
       - run: ./gradlew assembleDebug
