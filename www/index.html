@@ -41,7 +41,7 @@ let token=localStorage.getItem('t'),tab='new',q=null,sel=null,timer=null,map=nul
 
 function toast(m){const t=$('#toast');t.textContent=m;t.style.display='block';setTimeout(()=>t.style.display='none',3500)}
 async function api(path,opt={}){
-  const r=await fetch(API+path,{method:opt.method||'GET',headers:Object.assign({'Content-Type':'application/json'},token?{Authorization:'Bearer '+token}:{}),body:opt.body?JSON.stringify(opt.body):undefined});
+  const r=await fetch(API+path,{cache:'no-store',method:opt.method||'GET',headers:Object.assign({'Content-Type':'application/json'},token?{Authorization:'Bearer '+token}:{}),body:opt.body?JSON.stringify(opt.body):undefined});
   const d=await r.json().catch(()=>({}));
   if(!r.ok)throw new Error(d.error||'Erro inesperado');
   return d;
@@ -134,7 +134,7 @@ const card=o=>`<div class="card"><div class="st">#${o.id} · ${ST[o.status]}</di
 
 function ordersView(){
   $('#app').innerHTML='<div id="tr"></div><div id="ol"></div>';
-  load();timer=setInterval(()=>{load();poll()},10000);
+  let n=0;load();timer=setInterval(()=>{poll();if(++n%2===0)load()},5000);
 }
 function load(){return run(async()=>{
   const l=await api('/orders/mine');
@@ -153,8 +153,8 @@ function track(id){
 }
 function closeTrack(){tid=null;if(map){map.remove();map=null}$('#tr').innerHTML=''}
 function poll(){if(!tid)return;run(async()=>{
-  const t=await api('/orders/'+tid+'/tracking');
-  $('#ti').textContent=t.driver_name+' · '+t.plate;
+  const t=await api('/orders/'+tid+'/tracking?t='+Date.now());
+  $('#ti').textContent=t.driver_name+' · '+t.plate+(t.lat!=null?' · '+Number(t.lat).toFixed(5)+', '+Number(t.lng).toFixed(5):' · sem posição');
   if(t.lat!=null&&map){const p=[t.lat,t.lng];if(mk)mk.setLatLng(p);else mk=L.marker(p).addTo(map);map.setView(p)}
 })}
 
