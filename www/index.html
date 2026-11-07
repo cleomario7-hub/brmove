@@ -21,6 +21,7 @@ nav a{flex:1;text-align:center;padding:14px 0;color:var(--mut);font-weight:600}
 nav a.on{color:var(--r)}
 .st{font-size:13px;font-weight:700;color:var(--r)}
 #map{height:220px;border-radius:12px;margin:8px 0}
+#cm{height:260px;border-radius:12px;margin:8px 0}.pin{background:#D62828;color:#fff;border-radius:50%;width:28px;height:28px;line-height:28px;text-align:center;font-weight:800;border:2px solid #fff;box-shadow:0 1px 4px #0006}.pin.b{background:#1e8e3e}
 #toast{position:fixed;left:16px;right:16px;bottom:84px;background:#222;color:#fff;padding:12px;border-radius:10px;display:none;text-align:center}
 </style></head>
 <body>
@@ -71,26 +72,48 @@ function auth(reg){run(async()=>{
   token=d.token;localStorage.setItem('t',token);tab='new';render();
 })}
 
+let loc=null;
 function newView(){
   $('#app').innerHTML=`<div class="card"><h2>Nova entrega</h2>
-  <input id="pa" placeholder="Endereço de coleta (rua, número, cidade)" value="${esc(q&&q.p.address)}">
-  <input id="da" placeholder="Endereço de entrega" value="${esc(q&&q.d.address)}">
+  <input id="pa" placeholder="Endereço de coleta (rua, número, cidade)" value="${esc(loc&&loc.p.address)}">
+  <input id="da" placeholder="Endereço de entrega" value="${esc(loc&&loc.d.address)}">
   <textarea id="nt" rows="2" placeholder="Observações (opcional)"></textarea>
-  <button onclick="quote()">Ver preços</button></div><div id="opts"></div>`;
-  if(q)opts();
+  <button onclick="locate()">Localizar no mapa</button></div><div id="cf"></div><div id="opts"></div>`;
+  if(loc)confirmView();
 }
 async function geo(a){
   const r=await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=br&q='+encodeURIComponent(a));
   const d=await r.json();
   if(!d[0])throw new Error('Endereço não encontrado: '+a);
-  return{lat:+d[0].lat,lng:+d[0].lon};
+  return{lat:+d[0].lat,lng:+d[0].lon,label:d[0].display_name};
 }
-function quote(){run(async()=>{
+function locate(){run(async()=>{
   const a=$('#pa').value.trim(),b=$('#da').value.trim();
   if(!a||!b)throw new Error('Preencha os dois endereços');
   const p=await geo(a),d=await geo(b);
+  loc={p:Object.assign({address:a},p),d:Object.assign({address:b},d)};q=null;sel=null;$('#opts').innerHTML='';confirmView();
+})}
+const pin=(t,c)=>L.divIcon({className:'',html:`<div class="pin ${c}">${t}</div>`,iconSize:[28,28],iconAnchor:[14,14]});
+function confirmView(){
+  $('#cf').innerHTML=`<div class="card"><b>Confira no mapa</b>
+  <div style="font-size:13px;color:#6b6b6b;margin:6px 0"><b>A</b> Coleta: ${esc(loc.p.label)}<br><b>B</b> Entrega: ${esc(loc.d.label)}</div>
+  <div id="cm"></div><div style="font-size:13px;color:#6b6b6b">Arraste os pinos A e B para ajustar o ponto exato.</div>
+  <button onclick="quote()">Confirmar e ver preços</button></div>`;
+  if(map){map.remove()}
+  map=L.map('cm');
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap'}).addTo(map);
+  const mkr=(pt,t,c)=>{
+    const m=L.marker([pt.lat,pt.lng],{draggable:true,icon:pin(t,c)}).addTo(map);
+    m.on('dragend',()=>{const g=m.getLatLng();pt.lat=g.lat;pt.lng=g.lng;q=null;sel=null;$('#opts').innerHTML=''});
+    return m;
+  };
+  const A=mkr(loc.p,'A',''),B=mkr(loc.d,'B','b');
+  map.fitBounds(L.latLngBounds([A.getLatLng(),B.getLatLng()]).pad(0.3),{maxZoom:17});
+}
+function quote(){run(async()=>{
+  const p={lat:loc.p.lat,lng:loc.p.lng},d={lat:loc.d.lat,lng:loc.d.lng};
   const r=await api('/quotes',{method:'POST',body:{pickup:p,dropoff:d}});
-  q={p:Object.assign({address:a},p),d:Object.assign({address:b},d),o:r.options,km:r.distance_km};sel=null;opts();
+  q={p:Object.assign({address:loc.p.address},p),d:Object.assign({address:loc.d.address},d),o:r.options,km:r.distance_km};sel=null;opts();
 })}
 function opts(){
   $('#opts').innerHTML=`<div class="card"><b>${Number(q.km).toFixed(1)} km</b> · escolha o veículo
@@ -99,7 +122,7 @@ function opts(){
 }
 function order(){run(async()=>{
   await api('/orders',{method:'POST',body:{vehicle_type:sel,pickup:q.p,dropoff:q.d,notes:$('#nt')?$('#nt').value:''}});
-  q=null;sel=null;toast('Pedido criado!');go('orders');
+  q=null;sel=null;loc=null;toast('Pedido criado!');go('orders');
 })}
 
 const card=o=>`<div class="card"><div class="st">#${o.id} · ${ST[o.status]}</div>
