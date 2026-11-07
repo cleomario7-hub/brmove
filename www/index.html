@@ -40,6 +40,21 @@ const money=n=>'R$ '+Number(n).toFixed(2).replace('.',',');
 let token=localStorage.getItem('t'),tab='new',q=null,sel=null,timer=null,map=null,mk=null,tid=null;
 
 function toast(m){const t=$('#toast');t.textContent=m;t.style.display='block';setTimeout(()=>t.style.display='none',3500)}
+const NATIVE=!!(window.Capacitor&&Capacitor.isNativePlatform&&Capacitor.isNativePlatform());
+let pushStarted=false,pushOn=false,pushTok=null;
+async function initPush(){
+  if(!(window.Capacitor&&Capacitor.isNativePlatform&&Capacitor.isNativePlatform()))return;
+  try{
+    const P=Capacitor.registerPlugin('PushNotifications');
+    if(!pushOn){
+      pushOn=true;
+      await P.addListener('registration',t=>{pushTok=t.value;api('/devices',{method:'POST',body:{token:t.value}}).catch(()=>{})});
+      await P.addListener('pushNotificationReceived',n=>{toast((n.title||'')+(n.body?' — '+n.body:''));if(tab==='orders')load();});
+    }
+    const perm=await P.requestPermissions();
+    if(perm.receive==='granted')await P.register();
+  }catch(e){}
+}
 async function api(path,opt={}){
   const r=await fetch(API+path,{cache:'no-store',method:opt.method||'GET',headers:Object.assign({'Content-Type':'application/json'},token?{Authorization:'Bearer '+token}:{}),body:opt.body?JSON.stringify(opt.body):undefined});
   const d=await r.json().catch(()=>({}));
@@ -49,10 +64,11 @@ async function api(path,opt={}){
 function run(fn){return fn().catch(e=>{if(e.message==='Não autenticado')return logout();toast(e.message==='Failed to fetch'?'Sem conexão com o servidor':e.message)})}
 
 function go(t){tab=t;clearInterval(timer);tid=null;if(map){map.remove();map=null}render()}
-function logout(){token=null;localStorage.removeItem('t');q=null;sel=null;go('new')}
+function logout(){if(pushTok&&token)api('/devices/remove',{method:'POST',body:{token:pushTok}}).catch(()=>{});pushStarted=false;token=null;localStorage.removeItem('t');q=null;sel=null;go('new')}
 function render(){
   $('nav').style.display=token?'flex':'none';
   if(!token)return loginView(false);
+  if(!pushStarted){pushStarted=true;initPush()}
   document.querySelectorAll('nav a').forEach(a=>a.classList.toggle('on',a.dataset.t===tab));
   tab==='new'?newView():ordersView();
 }
