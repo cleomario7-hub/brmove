@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "784870668778",
+    "project_id": "brmove-fa234",
+    "storage_bucket": "brmove-fa234.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:784870668778:android:d0ffdabbc9faea2d925a93",
+        "android_client_info": {
+          "package_name": "br.com.fretesbsb.brmove"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB59_pxWZ_vH7O9MFIrslciwpE6F7gPwfo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
