@@ -50,15 +50,18 @@ let pushStarted=false,pushOn=false,pushTok=null;
 async function initPush(){
   if(!(window.Capacitor&&Capacitor.isNativePlatform&&Capacitor.isNativePlatform()))return;
   try{
-    const P=plug('PushNotifications');if(!P)return;
+    const P=plug('PushNotifications');
+    if(!P){toast('Notificações: plugin indisponível neste app');return}
     if(!pushOn){
       pushOn=true;
-      await P.addListener('registration',t=>{pushTok=t.value;api('/devices',{method:'POST',body:{token:t.value}}).catch(()=>{})});
+      await P.addListener('registration',t=>{pushTok=t.value;api('/devices',{method:'POST',body:{token:t.value}}).then(()=>toast('Notificações ativas neste aparelho')).catch(e=>toast('Notificações: erro ao registrar ('+e.message+')'))});
+      await P.addListener('registrationError',e=>toast('Notificações: erro no registro ('+(e.error||'desconhecido')+')'));
       await P.addListener('pushNotificationReceived',n=>{toast((n.title||'')+(n.body?' — '+n.body:''));if(tab==='orders')load();});
     }
     const perm=await P.requestPermissions();
     if(perm.receive==='granted')await P.register();
-  }catch(e){}
+    else toast('Notificações bloqueadas nas configurações do celular');
+  }catch(e){toast('Notificações: '+(e.message||'erro'))}
 }
 async function api(path,opt={}){
   const r=await fetch(API+path,{cache:'no-store',method:opt.method||'GET',headers:Object.assign({'Content-Type':'application/json'},token?{Authorization:'Bearer '+token}:{}),body:opt.body?JSON.stringify(opt.body):undefined});
