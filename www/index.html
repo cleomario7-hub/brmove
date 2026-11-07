@@ -41,11 +41,16 @@ let token=localStorage.getItem('t'),tab='new',q=null,sel=null,timer=null,map=nul
 
 function toast(m){const t=$('#toast');t.textContent=m;t.style.display='block';setTimeout(()=>t.style.display='none',3500)}
 const NATIVE=!!(window.Capacitor&&Capacitor.isNativePlatform&&Capacitor.isNativePlatform());
+function plug(n){
+  const C=window.Capacitor;if(!C)return null;
+  if(typeof C.registerPlugin==='function')return C.registerPlugin(n);
+  return (C.Plugins&&C.Plugins[n])||null;
+}
 let pushStarted=false,pushOn=false,pushTok=null;
 async function initPush(){
   if(!(window.Capacitor&&Capacitor.isNativePlatform&&Capacitor.isNativePlatform()))return;
   try{
-    const P=Capacitor.registerPlugin('PushNotifications');
+    const P=plug('PushNotifications');if(!P)return;
     if(!pushOn){
       pushOn=true;
       await P.addListener('registration',t=>{pushTok=t.value;api('/devices',{method:'POST',body:{token:t.value}}).catch(()=>{})});
