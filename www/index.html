@@ -36,6 +36,8 @@ const $=s=>document.querySelector(s);
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const V={moto:'🏍️ Moto',carro:'🚗 Carro',van:'🚐 Van',caminhao:'🚚 Caminhão'};
 const ST={pending:'Procurando motorista',accepted:'Motorista a caminho',picked_up:'Em entrega',delivered:'Entregue',cancelled:'Cancelada'};
+const stOf=o=>o.status==='pending'&&o.payment_status==='awaiting'?'Aguardando pagamento':ST[o.status];
+const PAY={paid:'✅ Pago via Pix',refunded:'↩️ Pix estornado',refund_failed:'↩️ Estorno em andamento'};
 const money=n=>'R$ '+Number(n).toFixed(2).replace('.',',');
 let token=localStorage.getItem('t'),tab='new',q=null,sel=null,timer=null,map=null,mk=null,tid=null;
 
@@ -71,7 +73,7 @@ async function api(path,opt={}){
 }
 function run(fn){return fn().catch(e=>{if(e.message==='Não autenticado')return logout();toast(e.message==='Failed to fetch'?'Sem conexão com o servidor':e.message)})}
 
-function go(t){tab=t;clearInterval(timer);tid=null;if(map){map.remove();map=null}render()}
+function go(t){tab=t;clearInterval(timer);stopPay();tid=null;if(map){map.remove();map=null}render()}
 function logout(){if(pushTok&&token)api('/devices/remove',{method:'POST',body:{token:pushTok}}).catch(()=>{});pushStarted=false;token=null;localStorage.removeItem('t');q=null;sel=null;go('new')}
 function render(){
   $('nav').style.display=token?'flex':'none';
@@ -142,16 +144,59 @@ function quote(){run(async()=>{
 function opts(){
   $('#opts').innerHTML=`<div class="card"><b>${Number(q.km).toFixed(1)} km</b> · escolha o veículo
   ${q.o.map(o=>`<div class="opt ${sel===o.vehicle_type?'on':''}" onclick="sel='${o.vehicle_type}';opts()"><span>${V[o.vehicle_type]}</span><b>${money(o.price)}</b></div>`).join('')}
-  <button ${sel?'':'disabled style="opacity:.5"'} onclick="order()">Pedir entrega</button></div>`;
+  <div style="font-size:13px;color:#6b6b6b;margin-top:8px">Pagamento: <b>Pix</b> (QR Code na próxima tela). O motorista é chamado assim que o Pix for confirmado.</div>
+  <button ${sel?'':'disabled style="opacity:.5"'} onclick="order()">Pedir e pagar com Pix</button></div>`;
 }
-function order(){run(async()=>{
-  await api('/orders',{method:'POST',body:{vehicle_type:sel,pickup:q.p,dropoff:q.d,notes:$('#nt')?$('#nt').value:''}});
-  q=null;sel=null;loc=null;toast('Pedido criado!');go('orders');
-})}
+let ordering=false;
+function order(){if(ordering)return;ordering=true;run(async()=>{
+  const d=await api('/orders',{method:'POST',body:{vehicle_type:sel,pickup:q.p,dropoff:q.d,notes:$('#nt')?$('#nt').value:''}});
+  q=null;sel=null;loc=null;pay(d.id,{price:d.price,pix:d.pix});
+}).finally(()=>{ordering=false})}
 
-const card=o=>`<div class="card"><div class="st">#${o.id} · ${ST[o.status]}</div>
+// ---------- pagamento via Pix ----------
+let payTimer=null;
+function stopPay(){clearInterval(payTimer);payTimer=null}
+function copyPix(){
+  const t=$('#pc');if(!t)return;
+  const ok=()=>toast('Código Pix copiado! Cole no app do seu banco.');
+  const fb=()=>{try{t.focus();t.select();t.setSelectionRange(0,99999);document.execCommand('copy')?ok():toast('Toque e segure o código para copiar')}catch(e){toast('Toque e segure o código para copiar')}};
+  if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(t.value).then(ok).catch(fb);else fb();
+}
+function pay(id,first){
+  stopPay();clearInterval(timer);if(map){map.remove();map=null}tab='pay';
+  document.querySelectorAll('nav a').forEach(a=>a.classList.remove('on'));
+  $('#app').innerHTML='<div class="card"><h2>Pagamento via Pix</h2><div id="px">Carregando…</div></div>';
+  let drawn=false,exp=null,n=0;
+  const tick=()=>{
+    const el=$('#pcd');if(!el||!exp)return;
+    const s=Math.max(0,Math.round((exp-Date.now())/1000));
+    el.textContent=s>0?'Aguardando pagamento… expira em '+Math.floor(s/60)+':'+String(s%60).padStart(2,'0'):'Pix expirado. Peça novamente.';
+  };
+  const apply=d=>{
+    if(!$('#px'))return stopPay();
+    if(d.payment_status==='paid'){stopPay();toast('Pagamento confirmado! Procurando motorista.');return go('orders')}
+    if(d.payment_status!=='awaiting'||d.status==='cancelled'){stopPay();toast('Pedido cancelado ou Pix expirado.');return go('orders')}
+    if(drawn)return;
+    drawn=true;const p=d.pix||{};exp=p.expires_at?new Date(p.expires_at).getTime():null;
+    $('#px').innerHTML=`<div style="font-size:30px;font-weight:800;margin:4px 0">${money(d.price)}</div>
+      <div style="color:#6b6b6b;font-size:14px">Pedido #${id}. Abra o app do seu banco e pague com Pix. A confirmação é automática.</div>
+      ${p.qr_base64?`<img alt="QR Code Pix" style="width:240px;max-width:100%;display:block;margin:12px auto" src="data:image/png;base64,${esc(p.qr_base64)}">`:''}
+      ${p.code?`<textarea id="pc" readonly rows="3" style="font-size:12px">${esc(p.code)}</textarea><button onclick="copyPix()">Copiar código Pix</button>`:''}
+      <div id="pcd" style="font-size:14px;color:#6b6b6b;margin:10px 0">Aguardando pagamento…</div>
+      <button class="s" onclick="go('orders')">Ver meus pedidos</button>
+      <button class="s" onclick="cancelOrder(${id},true)">Cancelar pedido</button>`;
+    tick();
+  };
+  const check=()=>api('/orders/'+id+'/payment?t='+Date.now()).then(apply).catch(e=>{if(e.message==='Não autenticado')logout()});
+  if(first&&first.pix)apply({payment_status:'awaiting',status:'pending',price:first.price,pix:first.pix});else check();
+  payTimer=setInterval(()=>{tick();if(++n%4===0)check()},1000);
+}
+
+const card=o=>`<div class="card"><div class="st">#${o.id} · ${stOf(o)}</div>
   <div>📍 ${esc(o.pickup_address)}</div><div>🏁 ${esc(o.dropoff_address)}</div>
   <div>${V[o.vehicle_type]} · ${Number(o.distance_km).toFixed(1)} km · <b>${money(o.price)}</b></div>
+  ${PAY[o.payment_status]?`<div style="font-size:13px;color:#6b6b6b">${PAY[o.payment_status]}</div>`:''}
+  ${o.status==='pending'&&o.payment_status==='awaiting'?`<button class="sm" onclick="pay(${o.id})">Pagar com Pix</button> `:''}
   ${['accepted','picked_up'].includes(o.status)?`<button class="s sm" onclick="track(${o.id})">Ver motorista no mapa</button> `:''}
   ${['pending','accepted'].includes(o.status)?`<button class="s sm" onclick="cancelOrder(${o.id})">Cancelar</button>`:''}
   ${o.status==='delivered'?(o.rating?`<div>Sua nota: ${'★'.repeat(o.rating)}</div>`:[1,2,3,4,5].map(n=>`<button class="s sm" onclick="rate(${o.id},${n})">${n}★</button>`).join(' ')):''}</div>`;
@@ -164,7 +209,13 @@ function load(){return run(async()=>{
   const l=await api('/orders/mine');
   $('#ol').innerHTML=l.length?l.map(card).join(''):'<div class="card">Você ainda não fez pedidos.</div>';
 })}
-function cancelOrder(id){if(confirm('Cancelar este pedido?'))run(async()=>{await api('/orders/'+id+'/cancel',{method:'POST'});load()})}
+function cancelOrder(id,fromPay){if(confirm('Cancelar este pedido? Se você já pagou, o valor volta por Pix.'))run(async()=>{
+  const o=await api('/orders/'+id+'/cancel',{method:'POST'});
+  if(o.payment_status==='refunded')toast('Pedido cancelado. Pix estornado.');
+  else if(o.payment_status==='refund_failed')toast('Pedido cancelado. A BRMove fará o estorno manualmente.');
+  else toast('Pedido cancelado.');
+  fromPay?go('orders'):load();
+})}
 function rate(id,n){run(async()=>{await api('/orders/'+id+'/rate',{method:'POST',body:{rating:n}});toast('Obrigado pela avaliação!');load()})}
 
 function track(id){
