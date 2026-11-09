@@ -6,7 +6,8 @@
 <style>
 :root{--r:#D62828;--tx:#1b1b1b;--mut:#6b6b6b;--ln:#e6e6e6}
 body{margin:0;font:16px system-ui,sans-serif;color:var(--tx);background:#f6f6f6;padding-bottom:calc(70px + env(safe-area-inset-bottom))}
-header{background:var(--r);color:#fff;padding:calc(14px + env(safe-area-inset-top)) 16px 14px;font-weight:800;font-size:22px}
+header{background:var(--r);color:#fff;padding:calc(14px + env(safe-area-inset-top)) 16px 14px;font-weight:800;font-size:22px;display:flex;align-items:center;gap:10px}
+.lg{display:flex}
 main{padding:14px;max-width:560px;margin:auto}
 h2{margin:0 0 8px}
 .card{background:#fff;border-radius:14px;padding:14px;margin-bottom:12px;box-shadow:0 1px 3px #0001}
@@ -25,7 +26,7 @@ nav a.on{color:var(--r)}
 #toast{position:fixed;left:16px;right:16px;bottom:84px;background:#222;color:#fff;padding:12px;border-radius:10px;display:none;text-align:center}
 </style></head>
 <body>
-<header>BRMove</header>
+<header><span class="lg"></span><span>BRMove</span></header>
 <main id="app"></main>
 <nav><a data-t="new" onclick="go('new')">Pedir</a><a data-t="orders" onclick="go('orders')">Pedidos</a><a onclick="logout()">Sair</a></nav>
 <div id="toast"></div>
@@ -33,6 +34,8 @@ nav a.on{color:var(--r)}
 <script>
 const API='https://api.fretesbsb.com.br';
 const $=s=>document.querySelector(s);
+const BF=(fg,gap,s)=>`<svg viewBox="0 0 512 512" width="${s}" height="${s}" aria-hidden="true"><path d="M312 186 C308 118 276 70 222 30 C206 100 222 168 268 230 Z" fill="${fg}"/><path d="M290 212 C258 136 190 86 84 66 C138 128 176 206 236 268 Z" fill="${gap}" stroke="${gap}" stroke-width="20" stroke-linejoin="round"/><path d="M290 212 C258 136 190 86 84 66 C138 128 176 206 236 268 Z" fill="${fg}"/><path d="M366 170 L502 146 L368 198 Z" fill="${fg}"/><path d="M372 178 C372 142 342 120 308 128 C276 136 254 160 240 192 C216 252 182 296 152 326 L60 424 L118 402 L112 466 L214 360 C262 352 326 322 352 262 C364 238 372 216 372 198 Z" fill="${gap}" stroke="${gap}" stroke-width="22" stroke-linejoin="round"/><path d="M372 178 C372 142 342 120 308 128 C276 136 254 160 240 192 C216 252 182 296 152 326 L60 424 L118 402 L112 466 L214 360 C262 352 326 322 352 262 C364 238 372 216 372 198 Z" fill="${fg}"/><path d="M366 170 L502 146 L368 198 Z" fill="${fg}"/><circle cx="340" cy="174" r="9" fill="${gap}"/></svg>`;
+$('header .lg').innerHTML=BF('#fff','#D62828',34);
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const V={moto:'🏍️ Moto',carro:'🚗 Carro',van:'🚐 Van',caminhao:'🚚 Caminhão'};
 const ST={pending:'Procurando motorista',accepted:'Motorista a caminho',picked_up:'Em entrega',delivered:'Entregue',cancelled:'Cancelada'};
@@ -84,7 +87,7 @@ function render(){
 }
 
 function loginView(reg){
-  $('#app').innerHTML=`<div class="card"><h2>${reg?'Criar conta':'Entrar'}</h2>
+  $('#app').innerHTML=`<div class="card"><div style="text-align:center;margin-bottom:6px">${BF('#D62828','#fff',72)}</div><h2>${reg?'Criar conta':'Entrar'}</h2>
   ${reg?'<input id="nm" placeholder="Nome"><input id="ph" type="tel" placeholder="Telefone">':''}
   <input id="em" type="email" placeholder="E-mail"><input id="pw" type="password" placeholder="Senha (mín. 6)">
   <button onclick="auth(${reg})">${reg?'Cadastrar':'Entrar'}</button>
