@@ -196,6 +196,7 @@ const card=o=>`<div class="card"><div class="st">#${o.id} · ${stOf(o)}</div>
   <div>📍 ${esc(o.pickup_address)}</div><div>🏁 ${esc(o.dropoff_address)}</div>
   <div>${V[o.vehicle_type]} · ${Number(o.distance_km).toFixed(1)} km · <b>${money(o.price)}</b></div>
   ${PAY[o.payment_status]?`<div style="font-size:13px;color:#6b6b6b">${PAY[o.payment_status]}</div>`:''}
+  ${o.delivery_code&&['pending','accepted','picked_up'].includes(o.status)?`<div style="margin:10px 0;padding:12px;border:2px dashed var(--r);border-radius:12px;text-align:center"><div style="font-size:13px;color:#6b6b6b">Código de entrega</div><div style="font-size:34px;font-weight:800;letter-spacing:8px;color:var(--r)">${esc(o.delivery_code)}</div><div style="font-size:12px;color:#6b6b6b">Quem receber o pedido informa este código ao motorista. Sem ele, a entrega não é concluída.</div></div>`:''}
   ${o.status==='pending'&&o.payment_status==='awaiting'?`<button class="sm" onclick="pay(${o.id})">Pagar com Pix</button> `:''}
   ${['accepted','picked_up'].includes(o.status)?`<button class="s sm" onclick="track(${o.id})">Ver motorista no mapa</button> `:''}
   ${['pending','accepted'].includes(o.status)?`<button class="s sm" onclick="cancelOrder(${o.id})">Cancelar</button>`:''}
