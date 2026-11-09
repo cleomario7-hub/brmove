@@ -19,6 +19,9 @@ jobs:
       - run: test -f capacitor.config.json || npx cap init BRMove br.com.fretesbsb.brmove --web-dir www
       - run: npx cap add android
       - run: |
+          find android/app/src/main/res -path '*mipmap*' -name 'ic_launcher*' -delete
+          cp -r resources/android/res/. android/app/src/main/res/
+      - run: |
           cp google-services.json android/app/google-services.json
           sed -i 's#<application#<uses-permission android:name="android.permission.POST_NOTIFICATIONS"/><application#' android/app/src/main/AndroidManifest.xml
       - run: npx cap sync android
