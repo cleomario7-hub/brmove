@@ -43,3 +43,23 @@ POST /orders
 ## Próximas etapas
 
 App do cliente, app do motorista, painel admin, pagamentos e notificações.
+
+
+## Chat privado das corridas
+
+O `npm run migrate` cria também a tabela `order_messages` sem apagar dados existentes.
+As rotas ficam no arquivo `src/chat-routes.js` e são registradas pelo `src/server.js`.
+
+Para aplicar somente o chat em um backend de produção que já tenha outras rotas mais novas,
+**não substitua o `server.js` inteiro por este arquivo antigo**. Copie `src/chat-routes.js`
+para a pasta `src/` do backend ativo e, depois das funções `auth`, `h`, `q` e `bad` estarem
+definidas, acrescente:
+
+```js
+require('./chat-routes')(app, { auth, h, q, bad });
+```
+
+Execute `src/chat-migration.sql` no mesmo banco PostgreSQL usado pela API. As rotas de
+contato e mensagens exigem JWT e só permitem acesso ao cliente e ao motorista vinculados
+à corrida enquanto ela estiver `accepted` ou `picked_up`. O app consulta mensagens a cada
+3 segundos. O telefone do outro participante só é liberado durante essa janela de corrida ativa.

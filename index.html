@@ -6,7 +6,8 @@
 <style>
 :root{--r:#D62828;--tx:#1b1b1b;--mut:#6b6b6b;--ln:#e6e6e6}
 body{margin:0;font:16px system-ui,sans-serif;color:var(--tx);background:#f6f6f6;padding-bottom:calc(70px + env(safe-area-inset-bottom))}
-header{background:var(--r);color:#fff;padding:calc(14px + env(safe-area-inset-top)) 16px 14px;font-weight:800;font-size:22px}
+header{background:var(--r);color:#fff;padding:calc(14px + env(safe-area-inset-top)) 16px 14px;font-weight:800;font-size:22px;display:flex;align-items:center;gap:10px}
+.lg{display:flex}
 main{padding:14px;max-width:560px;margin:auto}
 h2{margin:0 0 8px}
 .card{background:#fff;border-radius:14px;padding:14px;margin-bottom:12px;box-shadow:0 1px 3px #0001}
@@ -21,10 +22,22 @@ nav a{flex:1;text-align:center;padding:14px 0;color:var(--mut);font-weight:600}
 nav a.on{color:var(--r)}
 .st{font-size:13px;font-weight:700;color:var(--r)}
 #map{height:220px;border-radius:12px;margin:8px 0}
+#cm{height:260px;border-radius:12px;margin:8px 0}.pin{background:#D62828;color:#fff;border-radius:50%;width:28px;height:28px;line-height:28px;text-align:center;font-weight:800;border:2px solid #fff;box-shadow:0 1px 4px #0006}.pin.b{background:#1e8e3e}
 #toast{position:fixed;left:16px;right:16px;bottom:84px;background:#222;color:#fff;padding:12px;border-radius:10px;display:none;text-align:center}
+
+.chat-actions{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+.chat-actions a{flex:1;min-width:112px;text-align:center;text-decoration:none;border:1px solid var(--r);border-radius:10px;padding:10px 8px;color:var(--r);font-weight:700;background:#fff}
+.chat-box{height:300px;overflow:auto;background:#f5f5f5;border:1px solid var(--ln);border-radius:12px;padding:10px;margin:10px 0}
+.chat-msg{max-width:86%;background:#fff;border-radius:12px;padding:9px 11px;margin:7px 0;box-shadow:0 1px 2px #0001;overflow-wrap:anywhere}
+.chat-msg.me{margin-left:auto;background:#fff0ee}
+.chat-who{font-size:11px;font-weight:800;color:var(--mut);margin-bottom:3px}
+.chat-time{font-size:10px;color:var(--mut);text-align:right;margin-top:4px}
+.chat-compose{display:flex;gap:7px;align-items:flex-end}
+.chat-compose textarea{flex:1;min-width:0;margin:6px 0;resize:vertical}
+.chat-compose button{width:auto;min-width:90px;margin:6px 0}
 </style></head>
 <body>
-<header>BRMove</header>
+<header><span class="lg"></span><span>BRMove</span></header>
 <main id="app"></main>
 <nav><a data-t="new" onclick="go('new')">Pedir</a><a data-t="orders" onclick="go('orders')">Pedidos</a><a onclick="logout()">Sair</a></nav>
 <div id="toast"></div>
@@ -32,32 +45,61 @@ nav a.on{color:var(--r)}
 <script>
 const API='https://api.fretesbsb.com.br';
 const $=s=>document.querySelector(s);
+const BF=(fg,gap,s)=>`<svg viewBox="0 0 512 512" width="${s}" height="${s}" aria-hidden="true"><path d="M312 186 C308 118 276 70 222 30 C206 100 222 168 268 230 Z" fill="${fg}"/><path d="M290 212 C258 136 190 86 84 66 C138 128 176 206 236 268 Z" fill="${gap}" stroke="${gap}" stroke-width="20" stroke-linejoin="round"/><path d="M290 212 C258 136 190 86 84 66 C138 128 176 206 236 268 Z" fill="${fg}"/><path d="M366 170 L502 146 L368 198 Z" fill="${fg}"/><path d="M372 178 C372 142 342 120 308 128 C276 136 254 160 240 192 C216 252 182 296 152 326 L60 424 L118 402 L112 466 L214 360 C262 352 326 322 352 262 C364 238 372 216 372 198 Z" fill="${gap}" stroke="${gap}" stroke-width="22" stroke-linejoin="round"/><path d="M372 178 C372 142 342 120 308 128 C276 136 254 160 240 192 C216 252 182 296 152 326 L60 424 L118 402 L112 466 L214 360 C262 352 326 322 352 262 C364 238 372 216 372 198 Z" fill="${fg}"/><path d="M366 170 L502 146 L368 198 Z" fill="${fg}"/><circle cx="340" cy="174" r="9" fill="${gap}"/></svg>`;
+$('header .lg').innerHTML=BF('#fff','#D62828',34);
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const V={moto:'🏍️ Moto',carro:'🚗 Carro',van:'🚐 Van',caminhao:'🚚 Caminhão'};
 const ST={pending:'Procurando motorista',accepted:'Motorista a caminho',picked_up:'Em entrega',delivered:'Entregue',cancelled:'Cancelada'};
+const stOf=o=>o.status==='pending'&&o.payment_status==='awaiting'?'Aguardando pagamento':ST[o.status];
+const PAY={paid:'✅ Pago via Pix',refunded:'↩️ Pix estornado',refund_failed:'↩️ Estorno em andamento'};
 const money=n=>'R$ '+Number(n).toFixed(2).replace('.',',');
 let token=localStorage.getItem('t'),tab='new',q=null,sel=null,timer=null,map=null,mk=null,tid=null;
+let chatOrderId=null,chatLastId=0,chatTimer=null;
 
 function toast(m){const t=$('#toast');t.textContent=m;t.style.display='block';setTimeout(()=>t.style.display='none',3500)}
+const NATIVE=!!(window.Capacitor&&Capacitor.isNativePlatform&&Capacitor.isNativePlatform());
+function plug(n){
+  const C=window.Capacitor;if(!C)return null;
+  if(typeof C.registerPlugin==='function')return C.registerPlugin(n);
+  return (C.Plugins&&C.Plugins[n])||null;
+}
+let pushStarted=false,pushOn=false,pushTok=null;
+async function initPush(){
+  if(!(window.Capacitor&&Capacitor.isNativePlatform&&Capacitor.isNativePlatform()))return;
+  try{
+    const P=plug('PushNotifications');
+    if(!P){toast('Notificações: plugin indisponível neste app');return}
+    if(!pushOn){
+      pushOn=true;
+      await P.addListener('registration',t=>{pushTok=t.value;api('/devices',{method:'POST',body:{token:t.value}}).then(()=>toast('Notificações ativas neste aparelho')).catch(e=>toast('Notificações: erro ao registrar ('+e.message+')'))});
+      await P.addListener('registrationError',e=>toast('Notificações: erro no registro ('+(e.error||'desconhecido')+')'));
+      await P.addListener('pushNotificationReceived',n=>{toast((n.title||'')+(n.body?' — '+n.body:''));if(tab==='orders')load();});
+    }
+    const perm=await P.requestPermissions();
+    if(perm.receive==='granted')await P.register();
+    else toast('Notificações bloqueadas nas configurações do celular');
+  }catch(e){toast('Notificações: '+(e.message||'erro'))}
+}
 async function api(path,opt={}){
-  const r=await fetch(API+path,{method:opt.method||'GET',headers:Object.assign({'Content-Type':'application/json'},token?{Authorization:'Bearer '+token}:{}),body:opt.body?JSON.stringify(opt.body):undefined});
+  const r=await fetch(API+path,{cache:'no-store',method:opt.method||'GET',headers:Object.assign({'Content-Type':'application/json'},token?{Authorization:'Bearer '+token}:{}),body:opt.body?JSON.stringify(opt.body):undefined});
   const d=await r.json().catch(()=>({}));
   if(!r.ok)throw new Error(d.error||'Erro inesperado');
   return d;
 }
 function run(fn){return fn().catch(e=>{if(e.message==='Não autenticado')return logout();toast(e.message==='Failed to fetch'?'Sem conexão com o servidor':e.message)})}
 
-function go(t){tab=t;clearInterval(timer);tid=null;if(map){map.remove();map=null}render()}
-function logout(){token=null;localStorage.removeItem('t');q=null;sel=null;go('new')}
+function go(t){clearInterval(chatTimer);chatTimer=null;chatOrderId=null;chatLastId=0;tab=t;clearInterval(timer);stopPay();tid=null;if(map){map.remove();map=null}render()}
+function logout(){if(pushTok&&token)api('/devices/remove',{method:'POST',body:{token:pushTok}}).catch(()=>{});pushStarted=false;token=null;localStorage.removeItem('t');q=null;sel=null;go('new')}
 function render(){
   $('nav').style.display=token?'flex':'none';
   if(!token)return loginView(false);
+  if(!pushStarted){pushStarted=true;initPush()}
   document.querySelectorAll('nav a').forEach(a=>a.classList.toggle('on',a.dataset.t===tab));
   tab==='new'?newView():ordersView();
 }
 
 function loginView(reg){
-  $('#app').innerHTML=`<div class="card"><h2>${reg?'Criar conta':'Entrar'}</h2>
+  $('#app').innerHTML=`<div class="card"><div style="text-align:center;margin-bottom:6px">${BF('#D62828','#fff',72)}</div><h2>${reg?'Criar conta':'Entrar'}</h2>
   ${reg?'<input id="nm" placeholder="Nome"><input id="ph" type="tel" placeholder="Telefone">':''}
   <input id="em" type="email" placeholder="E-mail"><input id="pw" type="password" placeholder="Senha (mín. 6)">
   <button onclick="auth(${reg})">${reg?'Cadastrar':'Entrar'}</button>
@@ -71,54 +113,180 @@ function auth(reg){run(async()=>{
   token=d.token;localStorage.setItem('t',token);tab='new';render();
 })}
 
+let loc=null;
 function newView(){
   $('#app').innerHTML=`<div class="card"><h2>Nova entrega</h2>
-  <input id="pa" placeholder="Endereço de coleta (rua, número, cidade)" value="${esc(q&&q.p.address)}">
-  <input id="da" placeholder="Endereço de entrega" value="${esc(q&&q.d.address)}">
+  <input id="pa" placeholder="Endereço de coleta (rua, número, cidade)" value="${esc(loc&&loc.p.address)}">
+  <input id="da" placeholder="Endereço de entrega" value="${esc(loc&&loc.d.address)}">
   <textarea id="nt" rows="2" placeholder="Observações (opcional)"></textarea>
-  <button onclick="quote()">Ver preços</button></div><div id="opts"></div>`;
-  if(q)opts();
+  <button onclick="locate()">Localizar no mapa</button></div><div id="cf"></div><div id="opts"></div>`;
+  if(loc)confirmView();
 }
 async function geo(a){
   const r=await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=br&q='+encodeURIComponent(a));
   const d=await r.json();
   if(!d[0])throw new Error('Endereço não encontrado: '+a);
-  return{lat:+d[0].lat,lng:+d[0].lon};
+  return{lat:+d[0].lat,lng:+d[0].lon,label:d[0].display_name};
 }
-function quote(){run(async()=>{
+function locate(){run(async()=>{
   const a=$('#pa').value.trim(),b=$('#da').value.trim();
   if(!a||!b)throw new Error('Preencha os dois endereços');
   const p=await geo(a),d=await geo(b);
+  loc={p:Object.assign({address:a},p),d:Object.assign({address:b},d)};q=null;sel=null;$('#opts').innerHTML='';confirmView();
+})}
+const pin=(t,c)=>L.divIcon({className:'',html:`<div class="pin ${c}">${t}</div>`,iconSize:[28,28],iconAnchor:[14,14]});
+function confirmView(){
+  $('#cf').innerHTML=`<div class="card"><b>Confira no mapa</b>
+  <div style="font-size:13px;color:#6b6b6b;margin:6px 0"><b>A</b> Coleta: ${esc(loc.p.label)}<br><b>B</b> Entrega: ${esc(loc.d.label)}</div>
+  <div id="cm"></div><div style="font-size:13px;color:#6b6b6b">Arraste os pinos A e B para ajustar o ponto exato.</div>
+  <button onclick="quote()">Confirmar e ver preços</button></div>`;
+  if(map){map.remove()}
+  map=L.map('cm');
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap'}).addTo(map);
+  const mkr=(pt,t,c)=>{
+    const m=L.marker([pt.lat,pt.lng],{draggable:true,icon:pin(t,c)}).addTo(map);
+    m.on('dragend',()=>{const g=m.getLatLng();pt.lat=g.lat;pt.lng=g.lng;q=null;sel=null;$('#opts').innerHTML=''});
+    return m;
+  };
+  const A=mkr(loc.p,'A',''),B=mkr(loc.d,'B','b');
+  map.fitBounds(L.latLngBounds([A.getLatLng(),B.getLatLng()]).pad(0.3),{maxZoom:17});
+}
+function quote(){run(async()=>{
+  const p={lat:loc.p.lat,lng:loc.p.lng},d={lat:loc.d.lat,lng:loc.d.lng};
   const r=await api('/quotes',{method:'POST',body:{pickup:p,dropoff:d}});
-  q={p:Object.assign({address:a},p),d:Object.assign({address:b},d),o:r.options,km:r.distance_km};sel=null;opts();
+  q={p:Object.assign({address:loc.p.address},p),d:Object.assign({address:loc.d.address},d),o:r.options,km:r.distance_km};sel=null;opts();
 })}
 function opts(){
   $('#opts').innerHTML=`<div class="card"><b>${Number(q.km).toFixed(1)} km</b> · escolha o veículo
   ${q.o.map(o=>`<div class="opt ${sel===o.vehicle_type?'on':''}" onclick="sel='${o.vehicle_type}';opts()"><span>${V[o.vehicle_type]}</span><b>${money(o.price)}</b></div>`).join('')}
-  <button ${sel?'':'disabled style="opacity:.5"'} onclick="order()">Pedir entrega</button></div>`;
+  <div style="font-size:13px;color:#6b6b6b;margin-top:8px">Pagamento: <b>Pix</b> (QR Code na próxima tela). O motorista é chamado assim que o Pix for confirmado.</div>
+  <button ${sel?'':'disabled style="opacity:.5"'} onclick="order()">Pedir e pagar com Pix</button></div>`;
 }
-function order(){run(async()=>{
-  await api('/orders',{method:'POST',body:{vehicle_type:sel,pickup:q.p,dropoff:q.d,notes:$('#nt')?$('#nt').value:''}});
-  q=null;sel=null;toast('Pedido criado!');go('orders');
-})}
+let ordering=false;
+function order(){if(ordering)return;ordering=true;run(async()=>{
+  const d=await api('/orders',{method:'POST',body:{vehicle_type:sel,pickup:q.p,dropoff:q.d,notes:$('#nt')?$('#nt').value:''}});
+  q=null;sel=null;loc=null;pay(d.id,{price:d.price,pix:d.pix});
+}).finally(()=>{ordering=false})}
 
-const card=o=>`<div class="card"><div class="st">#${o.id} · ${ST[o.status]}</div>
+// ---------- pagamento via Pix ----------
+let payTimer=null;
+function stopPay(){clearInterval(payTimer);payTimer=null}
+function copyPix(){
+  const t=$('#pc');if(!t)return;
+  const ok=()=>toast('Código Pix copiado! Cole no app do seu banco.');
+  const fb=()=>{try{t.focus();t.select();t.setSelectionRange(0,99999);document.execCommand('copy')?ok():toast('Toque e segure o código para copiar')}catch(e){toast('Toque e segure o código para copiar')}};
+  if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(t.value).then(ok).catch(fb);else fb();
+}
+function pay(id,first){
+  stopPay();clearInterval(timer);if(map){map.remove();map=null}tab='pay';
+  document.querySelectorAll('nav a').forEach(a=>a.classList.remove('on'));
+  $('#app').innerHTML='<div class="card"><h2>Pagamento via Pix</h2><div id="px">Carregando…</div></div>';
+  let drawn=false,exp=null,n=0;
+  const tick=()=>{
+    const el=$('#pcd');if(!el||!exp)return;
+    const s=Math.max(0,Math.round((exp-Date.now())/1000));
+    el.textContent=s>0?'Aguardando pagamento… expira em '+Math.floor(s/60)+':'+String(s%60).padStart(2,'0'):'Pix expirado. Peça novamente.';
+  };
+  const apply=d=>{
+    if(!$('#px'))return stopPay();
+    if(d.payment_status==='paid'){stopPay();toast('Pagamento confirmado! Procurando motorista.');return go('orders')}
+    if(d.payment_status!=='awaiting'||d.status==='cancelled'){stopPay();toast('Pedido cancelado ou Pix expirado.');return go('orders')}
+    if(drawn)return;
+    drawn=true;const p=d.pix||{};exp=p.expires_at?new Date(p.expires_at).getTime():null;
+    $('#px').innerHTML=`<div style="font-size:30px;font-weight:800;margin:4px 0">${money(d.price)}</div>
+      <div style="color:#6b6b6b;font-size:14px">Pedido #${id}. Abra o app do seu banco e pague com Pix. A confirmação é automática.</div>
+      ${p.qr_base64?`<img alt="QR Code Pix" style="width:240px;max-width:100%;display:block;margin:12px auto" src="data:image/png;base64,${esc(p.qr_base64)}">`:''}
+      ${p.code?`<textarea id="pc" readonly rows="3" style="font-size:12px">${esc(p.code)}</textarea><button onclick="copyPix()">Copiar código Pix</button>`:''}
+      <div id="pcd" style="font-size:14px;color:#6b6b6b;margin:10px 0">Aguardando pagamento…</div>
+      <button class="s" onclick="go('orders')">Ver meus pedidos</button>
+      <button class="s" onclick="cancelOrder(${id},true)">Cancelar pedido</button>`;
+    tick();
+  };
+  const check=()=>api('/orders/'+id+'/payment?t='+Date.now()).then(apply).catch(e=>{if(e.message==='Não autenticado')logout()});
+  if(first&&first.pix)apply({payment_status:'awaiting',status:'pending',price:first.price,pix:first.pix});else check();
+  payTimer=setInterval(()=>{tick();if(++n%4===0)check()},1000);
+}
+
+const card=o=>`<div class="card"><div class="st">#${o.id} · ${stOf(o)}</div>
   <div>📍 ${esc(o.pickup_address)}</div><div>🏁 ${esc(o.dropoff_address)}</div>
   <div>${V[o.vehicle_type]} · ${Number(o.distance_km).toFixed(1)} km · <b>${money(o.price)}</b></div>
-  ${['accepted','picked_up'].includes(o.status)?`<button class="s sm" onclick="track(${o.id})">Ver motorista no mapa</button> `:''}
+  ${PAY[o.payment_status]?`<div style="font-size:13px;color:#6b6b6b">${PAY[o.payment_status]}</div>`:''}
+  ${o.delivery_code&&['pending','accepted','picked_up'].includes(o.status)?`<div style="margin:10px 0;padding:12px;border:2px dashed var(--r);border-radius:12px;text-align:center"><div style="font-size:13px;color:#6b6b6b">Código de entrega</div><div style="font-size:34px;font-weight:800;letter-spacing:8px;color:var(--r)">${esc(o.delivery_code)}</div><div style="font-size:12px;color:#6b6b6b">Quem receber o pedido informa este código ao motorista. Sem ele, a entrega não é concluída.</div></div>`:''}
+  ${o.status==='pending'&&o.payment_status==='awaiting'?`<button class="sm" onclick="pay(${o.id})">Pagar com Pix</button> `:''}
+  ${['accepted','picked_up'].includes(o.status)?`<button class="s sm" onclick="track(${o.id})">Ver motorista no mapa</button> <button class="s sm" onclick="openChat(${o.id})">Mensagens e contato</button> `:''}
   ${['pending','accepted'].includes(o.status)?`<button class="s sm" onclick="cancelOrder(${o.id})">Cancelar</button>`:''}
   ${o.status==='delivered'?(o.rating?`<div>Sua nota: ${'★'.repeat(o.rating)}</div>`:[1,2,3,4,5].map(n=>`<button class="s sm" onclick="rate(${o.id},${n})">${n}★</button>`).join(' ')):''}</div>`;
 
 function ordersView(){
   $('#app').innerHTML='<div id="tr"></div><div id="ol"></div>';
-  load();timer=setInterval(()=>{load();poll()},10000);
+  let n=0;load();timer=setInterval(()=>{poll();if(++n%2===0)load()},5000);
 }
 function load(){return run(async()=>{
   const l=await api('/orders/mine');
   $('#ol').innerHTML=l.length?l.map(card).join(''):'<div class="card">Você ainda não fez pedidos.</div>';
 })}
-function cancelOrder(id){if(confirm('Cancelar este pedido?'))run(async()=>{await api('/orders/'+id+'/cancel',{method:'POST'});load()})}
+function cancelOrder(id,fromPay){if(confirm('Cancelar este pedido? Se você já pagou, o valor volta por Pix.'))run(async()=>{
+  const o=await api('/orders/'+id+'/cancel',{method:'POST'});
+  if(o.payment_status==='refunded')toast('Pedido cancelado. Pix estornado.');
+  else if(o.payment_status==='refund_failed')toast('Pedido cancelado. A BRMove fará o estorno manualmente.');
+  else toast('Pedido cancelado.');
+  fromPay?go('orders'):load();
+})}
 function rate(id,n){run(async()=>{await api('/orders/'+id+'/rate',{method:'POST',body:{rating:n}});toast('Obrigado pela avaliação!');load()})}
+
+
+// ---------- chat e contato da corrida ----------
+function phoneLinks(phone,id){
+  let digits=String(phone||'').replace(/\D/g,'').replace(/^0+/,'');
+  if(digits&&!digits.startsWith('55'))digits='55'+digits;
+  if(!digits||digits.length<12||digits.length>13)return '<div style="font-size:13px;color:#6b6b6b">Telefone não cadastrado para este contato.</div>';
+  const msg=encodeURIComponent('Olá! Estou falando sobre a corrida #'+id+' no BRMove.');
+  return `<div class="chat-actions"><a href="tel:+${digits}">📞 Ligar</a><a href="https://wa.me/${digits}?text=${msg}" target="_blank" rel="noopener">🟢 WhatsApp</a></div>`;
+}
+function chatTime(value){const d=new Date(value);return Number.isNaN(d.getTime())?'':d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}
+function appendChatMessages(items){
+  const box=$('#chatMessages');if(!box)return;
+  const empty=box.querySelector('[data-empty-chat]');if(empty)empty.remove();
+  for(const m of items){
+    const id=Number(m.id);if(!Number.isFinite(id)||id<=chatLastId)continue;
+    const el=document.createElement('div');el.className='chat-msg'+(m.is_mine?' me':'');
+    el.innerHTML=`<div class="chat-who">${m.is_mine?'Você':esc(m.sender_name||'Contato')}</div><div>${esc(m.message)}</div><div class="chat-time">${esc(chatTime(m.created_at))}</div>`;
+    box.appendChild(el);chatLastId=id;
+  }
+  if(items.length)box.scrollTop=box.scrollHeight;
+  if(!box.querySelector('.chat-msg'))box.innerHTML='<div data-empty-chat style="text-align:center;color:#6b6b6b;font-size:13px;padding:20px">Nenhuma mensagem ainda. Comece a conversa.</div>'; 
+}
+async function refreshChat(){
+  if(!chatOrderId)return;
+  const id=chatOrderId;
+  const rows=await api('/orders/'+id+'/messages?after='+chatLastId);
+  if(chatOrderId===id)appendChatMessages(rows);
+}
+function openChat(id){
+  clearInterval(timer);clearInterval(chatTimer);chatOrderId=Number(id);chatLastId=0;
+  const current=chatOrderId;
+  $('#app').innerHTML=`<div class="card"><div class="st">Conversa da corrida #${current}</div><div id="chatContact">Carregando contato…</div><div id="chatMessages" class="chat-box"></div><div class="chat-compose"><textarea id="chatInput" rows="2" maxlength="1000" placeholder="Digite sua mensagem"></textarea><button id="chatSend" onclick="sendChatMessage()">Enviar</button></div><button class="s" onclick="closeChat()">Voltar aos pedidos</button></div>`;
+  run(async()=>{
+    const [contact,messages]=await Promise.all([api('/orders/'+current+'/contact'),api('/orders/'+current+'/messages')]);
+    if(chatOrderId!==current)return;
+    $('#chatContact').innerHTML=`<b>${esc(contact.name||'Contato da corrida')}</b>${phoneLinks(contact.phone,current)}`;
+    appendChatMessages(messages);
+    chatTimer=setInterval(()=>{refreshChat().catch(e=>{if(e.message==='Não autenticado')logout()})},3000);
+  });
+}
+function sendChatMessage(){
+  const input=$('#chatInput'),button=$('#chatSend');
+  if(!input||!chatOrderId)return;
+  const message=input.value.trim();if(!message){toast('Digite uma mensagem');return}
+  if(button)button.disabled=true;
+  run(async()=>{
+    const id=chatOrderId;
+    const sent=await api('/orders/'+id+'/messages',{method:'POST',body:{message}});
+    if(chatOrderId!==id)return;
+    input.value='';appendChatMessages([sent]);
+  }).finally(()=>{if(button&&button.isConnected)button.disabled=false});
+}
+function closeChat(){clearInterval(chatTimer);chatTimer=null;chatOrderId=null;chatLastId=0;go('orders')}
 
 function track(id){
   tid=id;
@@ -130,8 +298,8 @@ function track(id){
 }
 function closeTrack(){tid=null;if(map){map.remove();map=null}$('#tr').innerHTML=''}
 function poll(){if(!tid)return;run(async()=>{
-  const t=await api('/orders/'+tid+'/tracking');
-  $('#ti').textContent=t.driver_name+' · '+t.plate;
+  const t=await api('/orders/'+tid+'/tracking?t='+Date.now());
+  $('#ti').textContent=t.driver_name+' · '+t.plate+(t.lat!=null?' · '+Number(t.lat).toFixed(5)+', '+Number(t.lng).toFixed(5):' · sem posição');
   if(t.lat!=null&&map){const p=[t.lat,t.lng];if(mk)mk.setLatLng(p);else mk=L.marker(p).addTo(map);map.setView(p)}
 })}
 
