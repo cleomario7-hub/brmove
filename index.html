@@ -55,6 +55,7 @@ const PAY={paid:'✅ Pago via Pix',refunded:'↩️ Pix estornado',refund_failed
 const money=n=>'R$ '+Number(n).toFixed(2).replace('.',',');
 let token=localStorage.getItem('t'),tab='new',q=null,sel=null,timer=null,map=null,mk=null,tid=null;
 let chatOrderId=null,chatLastId=0,chatTimer=null;
+let chatAudioContext=null,chatAudioReady=false;
 
 function toast(m){const t=$('#toast');t.textContent=m;t.style.display='block';setTimeout(()=>t.style.display='none',3500)}
 const NATIVE=!!(window.Capacitor&&Capacitor.isNativePlatform&&Capacitor.isNativePlatform());
@@ -243,16 +244,44 @@ function phoneLinks(phone,id){
   const msg=encodeURIComponent('Olá! Estou falando sobre a corrida #'+id+' no BRMove.');
   return `<div class="chat-actions"><a href="tel:+${digits}">📞 Ligar</a><a href="https://wa.me/${digits}?text=${msg}" target="_blank" rel="noopener">🟢 WhatsApp</a></div>`;
 }
+// Som curto para mensagens recebidas. O AudioContext é liberado no toque em "Mensagens e contato".
+function unlockChatSound(){
+  const AudioCtx=window.AudioContext||window.webkitAudioContext;
+  if(!AudioCtx)return;
+  try{
+    if(!chatAudioContext)chatAudioContext=new AudioCtx();
+    const resumed=chatAudioContext.state==='suspended'?chatAudioContext.resume():Promise.resolve();
+    Promise.resolve(resumed).then(()=>{chatAudioReady=!!chatAudioContext&&chatAudioContext.state==='running'}).catch(()=>{chatAudioReady=false});
+  }catch(_){chatAudioReady=false}
+}
+function playChatSound(){
+  if(!chatAudioReady||!chatAudioContext||chatAudioContext.state!=='running')return;
+  try{
+    const ctx=chatAudioContext,now=ctx.currentTime;
+    [[740,0],[988,0.14]].forEach(([frequency,delay])=>{
+      const osc=ctx.createOscillator(),gain=ctx.createGain(),start=now+delay;
+      osc.type='sine';osc.frequency.setValueAtTime(frequency,start);
+      gain.gain.setValueAtTime(0.0001,start);
+      gain.gain.exponentialRampToValueAtTime(0.12,start+0.015);
+      gain.gain.exponentialRampToValueAtTime(0.0001,start+0.17);
+      osc.connect(gain);gain.connect(ctx.destination);
+      osc.start(start);osc.stop(start+0.18);
+    });
+  }catch(_){/* O som não pode interromper o recebimento das mensagens. */}
+}
 function chatTime(value){const d=new Date(value);return Number.isNaN(d.getTime())?'':d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}
-function appendChatMessages(items){
+function appendChatMessages(items,playIncomingSound=false){
   const box=$('#chatMessages');if(!box)return;
   const empty=box.querySelector('[data-empty-chat]');if(empty)empty.remove();
+  let receivedIncoming=false;
   for(const m of items){
     const id=Number(m.id);if(!Number.isFinite(id)||id<=chatLastId)continue;
     const el=document.createElement('div');el.className='chat-msg'+(m.is_mine?' me':'');
     el.innerHTML=`<div class="chat-who">${m.is_mine?'Você':esc(m.sender_name||'Contato')}</div><div>${esc(m.message)}</div><div class="chat-time">${esc(chatTime(m.created_at))}</div>`;
     box.appendChild(el);chatLastId=id;
+    if(playIncomingSound&&!m.is_mine)receivedIncoming=true;
   }
+  if(receivedIncoming)playChatSound();
   if(items.length)box.scrollTop=box.scrollHeight;
   if(!box.querySelector('.chat-msg'))box.innerHTML='<div data-empty-chat style="text-align:center;color:#6b6b6b;font-size:13px;padding:20px">Nenhuma mensagem ainda. Comece a conversa.</div>'; 
 }
@@ -260,9 +289,10 @@ async function refreshChat(){
   if(!chatOrderId)return;
   const id=chatOrderId;
   const rows=await api('/orders/'+id+'/messages?after='+chatLastId);
-  if(chatOrderId===id)appendChatMessages(rows);
+  if(chatOrderId===id)appendChatMessages(rows,true);
 }
 function openChat(id){
+  unlockChatSound();
   clearInterval(timer);clearInterval(chatTimer);chatOrderId=Number(id);chatLastId=0;
   const current=chatOrderId;
   $('#app').innerHTML=`<div class="card"><div class="st">Conversa da corrida #${current}</div><div id="chatContact">Carregando contato…</div><div id="chatMessages" class="chat-box"></div><div class="chat-compose"><textarea id="chatInput" rows="2" maxlength="1000" placeholder="Digite sua mensagem"></textarea><button id="chatSend" onclick="sendChatMessage()">Enviar</button></div><button class="s" onclick="closeChat()">Voltar aos pedidos</button></div>`;
