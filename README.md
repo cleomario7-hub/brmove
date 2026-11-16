@@ -18,3 +18,8 @@ Abra `www/index.html` direto no navegador do computador.
 
 Os endereços são convertidos em coordenadas pelo OpenStreetMap (gratuito, bom para
 testes). Para produção, trocar por Google Maps ou Mapbox.
+
+
+## Chat e contato da corrida
+
+Depois que o motorista aceitar o pedido, o cliente encontra em **Pedidos** a opção **Mensagens e contato**. O chat é atualizado automaticamente e oferece ligação e WhatsApp quando o telefone do motorista estiver cadastrado.
