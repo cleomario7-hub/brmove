@@ -220,10 +220,6 @@ app.get('/orders/:id/tracking', auth('client'), h(async (req, res) => {
   res.json(r.rows[0]);
 }));
 
-
-// Chat privado: rotas isoladas para facilitar a integração no servidor existente.
-require('./chat-routes')(app, { auth, h, q, bad });
-
 // ---------- admin ----------
 app.get('/admin/drivers', auth('admin'), h(async (req, res) => {
   const r = await q(
