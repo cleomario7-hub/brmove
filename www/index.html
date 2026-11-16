@@ -24,17 +24,6 @@ nav a.on{color:var(--r)}
 #map{height:220px;border-radius:12px;margin:8px 0}
 #cm{height:260px;border-radius:12px;margin:8px 0}.pin{background:#D62828;color:#fff;border-radius:50%;width:28px;height:28px;line-height:28px;text-align:center;font-weight:800;border:2px solid #fff;box-shadow:0 1px 4px #0006}.pin.b{background:#1e8e3e}
 #toast{position:fixed;left:16px;right:16px;bottom:84px;background:#222;color:#fff;padding:12px;border-radius:10px;display:none;text-align:center}
-
-.chat-actions{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
-.chat-actions a{flex:1;min-width:112px;text-align:center;text-decoration:none;border:1px solid var(--r);border-radius:10px;padding:10px 8px;color:var(--r);font-weight:700;background:#fff}
-.chat-box{height:300px;overflow:auto;background:#f5f5f5;border:1px solid var(--ln);border-radius:12px;padding:10px;margin:10px 0}
-.chat-msg{max-width:86%;background:#fff;border-radius:12px;padding:9px 11px;margin:7px 0;box-shadow:0 1px 2px #0001;overflow-wrap:anywhere}
-.chat-msg.me{margin-left:auto;background:#fff0ee}
-.chat-who{font-size:11px;font-weight:800;color:var(--mut);margin-bottom:3px}
-.chat-time{font-size:10px;color:var(--mut);text-align:right;margin-top:4px}
-.chat-compose{display:flex;gap:7px;align-items:flex-end}
-.chat-compose textarea{flex:1;min-width:0;margin:6px 0;resize:vertical}
-.chat-compose button{width:auto;min-width:90px;margin:6px 0}
 </style></head>
 <body>
 <header><span class="lg"></span><span>BRMove</span></header>
@@ -54,7 +43,6 @@ const stOf=o=>o.status==='pending'&&o.payment_status==='awaiting'?'Aguardando pa
 const PAY={paid:'✅ Pago via Pix',refunded:'↩️ Pix estornado',refund_failed:'↩️ Estorno em andamento'};
 const money=n=>'R$ '+Number(n).toFixed(2).replace('.',',');
 let token=localStorage.getItem('t'),tab='new',q=null,sel=null,timer=null,map=null,mk=null,tid=null;
-let chatOrderId=null,chatLastId=0,chatTimer=null;
 
 function toast(m){const t=$('#toast');t.textContent=m;t.style.display='block';setTimeout(()=>t.style.display='none',3500)}
 const NATIVE=!!(window.Capacitor&&Capacitor.isNativePlatform&&Capacitor.isNativePlatform());
@@ -88,7 +76,7 @@ async function api(path,opt={}){
 }
 function run(fn){return fn().catch(e=>{if(e.message==='Não autenticado')return logout();toast(e.message==='Failed to fetch'?'Sem conexão com o servidor':e.message)})}
 
-function go(t){clearInterval(chatTimer);chatTimer=null;chatOrderId=null;chatLastId=0;tab=t;clearInterval(timer);stopPay();tid=null;if(map){map.remove();map=null}render()}
+function go(t){tab=t;clearInterval(timer);stopPay();tid=null;if(map){map.remove();map=null}render()}
 function logout(){if(pushTok&&token)api('/devices/remove',{method:'POST',body:{token:pushTok}}).catch(()=>{});pushStarted=false;token=null;localStorage.removeItem('t');q=null;sel=null;go('new')}
 function render(){
   $('nav').style.display=token?'flex':'none';
@@ -213,7 +201,7 @@ const card=o=>`<div class="card"><div class="st">#${o.id} · ${stOf(o)}</div>
   ${PAY[o.payment_status]?`<div style="font-size:13px;color:#6b6b6b">${PAY[o.payment_status]}</div>`:''}
   ${o.delivery_code&&['pending','accepted','picked_up'].includes(o.status)?`<div style="margin:10px 0;padding:12px;border:2px dashed var(--r);border-radius:12px;text-align:center"><div style="font-size:13px;color:#6b6b6b">Código de entrega</div><div style="font-size:34px;font-weight:800;letter-spacing:8px;color:var(--r)">${esc(o.delivery_code)}</div><div style="font-size:12px;color:#6b6b6b">Quem receber o pedido informa este código ao motorista. Sem ele, a entrega não é concluída.</div></div>`:''}
   ${o.status==='pending'&&o.payment_status==='awaiting'?`<button class="sm" onclick="pay(${o.id})">Pagar com Pix</button> `:''}
-  ${['accepted','picked_up'].includes(o.status)?`<button class="s sm" onclick="track(${o.id})">Ver motorista no mapa</button> <button class="s sm" onclick="openChat(${o.id})">Mensagens e contato</button> `:''}
+  ${['accepted','picked_up'].includes(o.status)?`<button class="s sm" onclick="track(${o.id})">Ver motorista no mapa</button> `:''}
   ${['pending','accepted'].includes(o.status)?`<button class="s sm" onclick="cancelOrder(${o.id})">Cancelar</button>`:''}
   ${o.status==='delivered'?(o.rating?`<div>Sua nota: ${'★'.repeat(o.rating)}</div>`:[1,2,3,4,5].map(n=>`<button class="s sm" onclick="rate(${o.id},${n})">${n}★</button>`).join(' ')):''}</div>`;
 
@@ -233,60 +221,6 @@ function cancelOrder(id,fromPay){if(confirm('Cancelar este pedido? Se você já 
   fromPay?go('orders'):load();
 })}
 function rate(id,n){run(async()=>{await api('/orders/'+id+'/rate',{method:'POST',body:{rating:n}});toast('Obrigado pela avaliação!');load()})}
-
-
-// ---------- chat e contato da corrida ----------
-function phoneLinks(phone,id){
-  let digits=String(phone||'').replace(/\D/g,'').replace(/^0+/,'');
-  if(digits&&!digits.startsWith('55'))digits='55'+digits;
-  if(!digits||digits.length<12||digits.length>13)return '<div style="font-size:13px;color:#6b6b6b">Telefone não cadastrado para este contato.</div>';
-  const msg=encodeURIComponent('Olá! Estou falando sobre a corrida #'+id+' no BRMove.');
-  return `<div class="chat-actions"><a href="tel:+${digits}">📞 Ligar</a><a href="https://wa.me/${digits}?text=${msg}" target="_blank" rel="noopener">🟢 WhatsApp</a></div>`;
-}
-function chatTime(value){const d=new Date(value);return Number.isNaN(d.getTime())?'':d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}
-function appendChatMessages(items){
-  const box=$('#chatMessages');if(!box)return;
-  const empty=box.querySelector('[data-empty-chat]');if(empty)empty.remove();
-  for(const m of items){
-    const id=Number(m.id);if(!Number.isFinite(id)||id<=chatLastId)continue;
-    const el=document.createElement('div');el.className='chat-msg'+(m.is_mine?' me':'');
-    el.innerHTML=`<div class="chat-who">${m.is_mine?'Você':esc(m.sender_name||'Contato')}</div><div>${esc(m.message)}</div><div class="chat-time">${esc(chatTime(m.created_at))}</div>`;
-    box.appendChild(el);chatLastId=id;
-  }
-  if(items.length)box.scrollTop=box.scrollHeight;
-  if(!box.querySelector('.chat-msg'))box.innerHTML='<div data-empty-chat style="text-align:center;color:#6b6b6b;font-size:13px;padding:20px">Nenhuma mensagem ainda. Comece a conversa.</div>'; 
-}
-async function refreshChat(){
-  if(!chatOrderId)return;
-  const id=chatOrderId;
-  const rows=await api('/orders/'+id+'/messages?after='+chatLastId);
-  if(chatOrderId===id)appendChatMessages(rows);
-}
-function openChat(id){
-  clearInterval(timer);clearInterval(chatTimer);chatOrderId=Number(id);chatLastId=0;
-  const current=chatOrderId;
-  $('#app').innerHTML=`<div class="card"><div class="st">Conversa da corrida #${current}</div><div id="chatContact">Carregando contato…</div><div id="chatMessages" class="chat-box"></div><div class="chat-compose"><textarea id="chatInput" rows="2" maxlength="1000" placeholder="Digite sua mensagem"></textarea><button id="chatSend" onclick="sendChatMessage()">Enviar</button></div><button class="s" onclick="closeChat()">Voltar aos pedidos</button></div>`;
-  run(async()=>{
-    const [contact,messages]=await Promise.all([api('/orders/'+current+'/contact'),api('/orders/'+current+'/messages')]);
-    if(chatOrderId!==current)return;
-    $('#chatContact').innerHTML=`<b>${esc(contact.name||'Contato da corrida')}</b>${phoneLinks(contact.phone,current)}`;
-    appendChatMessages(messages);
-    chatTimer=setInterval(()=>{refreshChat().catch(e=>{if(e.message==='Não autenticado')logout()})},3000);
-  });
-}
-function sendChatMessage(){
-  const input=$('#chatInput'),button=$('#chatSend');
-  if(!input||!chatOrderId)return;
-  const message=input.value.trim();if(!message){toast('Digite uma mensagem');return}
-  if(button)button.disabled=true;
-  run(async()=>{
-    const id=chatOrderId;
-    const sent=await api('/orders/'+id+'/messages',{method:'POST',body:{message}});
-    if(chatOrderId!==id)return;
-    input.value='';appendChatMessages([sent]);
-  }).finally(()=>{if(button&&button.isConnected)button.disabled=false});
-}
-function closeChat(){clearInterval(chatTimer);chatTimer=null;chatOrderId=null;chatLastId=0;go('orders')}
 
 function track(id){
   tid=id;
