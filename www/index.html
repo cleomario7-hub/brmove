@@ -17,6 +17,8 @@ button.s{background:#fff;color:var(--r);border:1px solid var(--r)}
 button.sm{width:auto;padding:8px 12px;font-size:14px}
 .opt{display:flex;justify-content:space-between;padding:12px;border:2px solid var(--ln);border-radius:12px;margin:8px 0}
 .opt.on{border-color:var(--r);background:#fff1f1}
+.opt.off{opacity:.55;background:#f3f3f3;border-style:dashed;cursor:not-allowed}
+.opt.off small{display:block;font-size:12px;color:#6b6b6b;font-weight:600}
 nav{position:fixed;bottom:0;left:0;right:0;display:none;background:#fff;border-top:1px solid var(--ln);padding-bottom:env(safe-area-inset-bottom)}
 nav a{flex:1;text-align:center;padding:14px 0;color:var(--mut);font-weight:600}
 nav a.on{color:var(--r)}
@@ -159,7 +161,9 @@ function quote(){run(async()=>{
 })}
 function opts(){
   $('#opts').innerHTML=`<div class="card"><b>${Number(q.km).toFixed(1)} km</b> · escolha o veículo
-  ${q.o.map(o=>`<div class="opt ${sel===o.vehicle_type?'on':''}" onclick="sel='${o.vehicle_type}';opts()"><span>${V[o.vehicle_type]}</span><b>${money(o.price)}</b></div>`).join('')}
+  ${q.o.map(o=>o.active===false
+    ?`<div class="opt off" onclick="toast('${(V[o.vehicle_type]||'').replace(/^\S+\s/,'')} indisponível no momento. Escolha outro veículo.')"><span>🔒 ${V[o.vehicle_type]}<small>Indisponível no momento</small></span><b>—</b></div>`
+    :`<div class="opt ${sel===o.vehicle_type?'on':''}" onclick="sel='${o.vehicle_type}';opts()"><span>${V[o.vehicle_type]}</span><b>${money(o.price)}</b></div>`).join('')}
   <div style="font-size:13px;color:#6b6b6b;margin-top:8px">Pagamento: <b>Pix</b> (QR Code na próxima tela). O motorista é chamado assim que o Pix for confirmado.</div>
   <button ${sel?'':'disabled style="opacity:.5"'} onclick="order()">Pedir e pagar com Pix</button></div>`;
 }
