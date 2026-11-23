@@ -27,6 +27,14 @@ jobs:
           if [ ! -d android ]; then npx cap add android; fi
           npx cap sync android
 
+      - name: Definir minSdkVersion 24
+        run: |
+          if [ -f android/variables.gradle ]; then
+            sed -i -E "s/minSdkVersion = [0-9]+/minSdkVersion = 24/" android/variables.gradle
+            grep -n "minSdkVersion" android/variables.gradle
+          fi
+          sed -i -E "s/minSdkVersion [0-9]+/minSdkVersion 24/" android/app/build.gradle || true
+
       - name: Definir versionCode (numero do build)
         run: |
           F=android/app/build.gradle
