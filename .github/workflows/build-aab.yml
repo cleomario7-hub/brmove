@@ -27,13 +27,17 @@ jobs:
           if [ ! -d android ]; then npx cap add android; fi
           npx cap sync android
 
-      - name: Definir minSdkVersion 24
+      - name: Definir minSdk 24 e target/compile SDK 36
         run: |
-          if [ -f android/variables.gradle ]; then
-            sed -i -E "s/minSdkVersion = [0-9]+/minSdkVersion = 24/" android/variables.gradle
-            grep -n "minSdkVersion" android/variables.gradle
+          V=android/variables.gradle
+          if [ -f "$V" ]; then
+            sed -i -E "s/minSdkVersion = [0-9]+/minSdkVersion = 24/" "$V"
+            sed -i -E "s/compileSdkVersion = [0-9]+/compileSdkVersion = 36/" "$V"
+            sed -i -E "s/targetSdkVersion = [0-9]+/targetSdkVersion = 36/" "$V"
+            cat "$V"
           fi
-          sed -i -E "s/minSdkVersion [0-9]+/minSdkVersion 24/" android/app/build.gradle || true
+          sed -i -E "s/minSdkVersion [0-9]+/minSdkVersion 24/; s/targetSdkVersion [0-9]+/targetSdkVersion 36/; s/compileSdkVersion [0-9]+/compileSdkVersion 36/" android/app/build.gradle || true
+          echo "android.suppressUnsupportedCompileSdk=36" >> android/gradle.properties
 
       - name: Definir versionCode (numero do build)
         run: |
